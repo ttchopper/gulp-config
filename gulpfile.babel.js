@@ -10,7 +10,7 @@ import autoprefixer from 'gulp-autoprefixer';
 import plumber from 'gulp-plumber';
 import svgSprite from 'gulp-svg-sprite';
 import cheerio from 'gulp-cheerio';
-
+import webpack from 'webpack-stream';
 const bs = browserSync.create();
 
 gulp.task('clean', () => {
@@ -34,9 +34,15 @@ gulp.task('styles', () => {
     return gulp.src('src/root/index.styl')
 
         .pipe(sourcemaps.init())
-        .pipe(plumber())
+        .pipe(plumber({
+            handleError: function (err) {
+                console.log(err);
+                this.emit('end');
+            }
+        }))
         .pipe(gulpStylus(
             {
+                'include css': true,
                 compress: false,
                 define: {
                     url: resolver()
@@ -48,9 +54,32 @@ gulp.task('styles', () => {
                 browsers: ['last 7 iOS versions']
             }
         ))
-        .pipe(plumber())
         .pipe(sourcemaps.write())
         .pipe(gulp.dest('build/styles'));
+});
+
+gulp.task('webpack', () => {
+    return gulp.src('src/root/index.js')
+        .pipe(plumber())
+        .pipe(webpack({
+            // babel-polyfill for promises in old browsers
+            entry: ['babel-polyfill', './src/root/index.js'],
+            output: {
+                filename: 'index.js',
+                library: 'index'
+            },
+            devtool: 'source-map',
+            module: {
+                loaders: [
+                    {
+                        loader: "babel-loader",
+                        test: /\.jsx?$/,
+                        exclude: /node_modules/
+                    }
+                ]
+            }
+        }))
+        .pipe(gulp.dest('build/js/'));
 });
 
 gulp.task('assets', () => {
@@ -89,13 +118,15 @@ gulp.task('watch', () => {
     gulp.watch('src/**/*.pug', gulp.series('html'));
     gulp.watch('src/**/*.{png,jpg}', gulp.series('assets'));
     gulp.watch('src/**/*.svg', gulp.series('sprite'));
+    gulp.watch('src/**/*.js', gulp.series('webpack'));
 })
 
 
 
 gulp.task('serve', () => {
     bs.init({
-        server: 'build'
+        server: 'build',
+        cors: true
     });
 
     bs.watch('build/**/*.*').on('change', bs.reload);
